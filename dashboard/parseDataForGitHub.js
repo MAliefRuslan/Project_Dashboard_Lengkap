@@ -86,6 +86,7 @@ async function main() {
             Branch: row['Branch'] || row['Cabang'],
             Category: row['Menu Category'],
             PaymentMethod: row['Payment Method'] || 'Unknown',
+            Hour: row['Hour'] || 'Unknown',
         };
     });
     console.log(`  Berhasil mengekstrak ${masterData.length} baris.`);

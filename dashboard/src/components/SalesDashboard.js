@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { 
-  BarChart, Bar, PieChart, Pie, 
+  BarChart, Bar, PieChart, Pie, AreaChart, Area,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend 
 } from 'recharts';
 import { Filter, TrendingUp, DollarSign, Calendar, ListOrdered } from 'lucide-react';
@@ -175,6 +175,20 @@ export default function SalesDashboard({ masterData }) {
     return Object.entries(catMap)
       .map(([name, revenue]) => ({ name, revenue }))
       .sort((a, b) => b.revenue - a.revenue);
+  }, [filteredData]);
+
+  // Peak Hours Data (Area Chart)
+  const peakHoursData = useMemo(() => {
+    const hrMap = {};
+    filteredData.forEach(d => {
+      if (d.Hour !== 'Unknown' && d.Hour != null) {
+        const hrStr = String(d.Hour).padStart(2, '0') + ':00';
+        hrMap[hrStr] = (hrMap[hrStr] || 0) + d.revenue;
+      }
+    });
+    return Object.entries(hrMap)
+      .map(([hour, revenue]) => ({ hour, revenue }))
+      .sort((a, b) => a.hour.localeCompare(b.hour));
   }, [filteredData]);
 
   // Payment Method Data (Pie Chart)
@@ -381,7 +395,7 @@ export default function SalesDashboard({ masterData }) {
         </div>
 
         {/* Category Bar Chart */}
-        <div className="glass-card flex flex-col md:col-span-2">
+        <div className="glass-card flex flex-col">
           <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Pendapatan Berdasarkan Kategori</h3>
           <div style={{ height: 250, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -396,6 +410,28 @@ export default function SalesDashboard({ masterData }) {
                   ))}
                 </Bar>
               </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Peak Hours Area Chart */}
+        <div className="glass-card flex flex-col">
+          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Trafik Jam Sibuk (Peak Hours)</h3>
+          <div style={{ height: 250, width: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={peakHoursData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorHour" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={COLORS[4]} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={COLORS[4]} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(150, 150, 150, 0.1)" />
+                <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} tickFormatter={formatCompactRp} width={60} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="revenue" name="Pendapatan" stroke={COLORS[4]} strokeWidth={3} fillOpacity={1} fill="url(#colorHour)" />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
