@@ -177,6 +177,18 @@ export default function SalesDashboard({ masterData }) {
       .sort((a, b) => b.revenue - a.revenue);
   }, [filteredData]);
 
+  // Payment Method Data (Pie Chart)
+  const paymentMethodData = useMemo(() => {
+    const payMap = {};
+    filteredData.forEach(d => {
+      const pm = d.PaymentMethod || 'Unknown';
+      payMap[pm] = (payMap[pm] || 0) + d.revenue;
+    });
+    return Object.entries(payMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [filteredData]);
+
   // Top 10 Menus
   const topMenus = useMemo(() => {
     const menuMap = {};
@@ -357,7 +369,7 @@ export default function SalesDashboard({ masterData }) {
         </div>
 
         {/* Category Bar Chart */}
-        <div className="glass-card flex flex-col md:col-span-2">
+        <div className="glass-card flex flex-col">
           <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Pendapatan Berdasarkan Kategori</h3>
           <div style={{ height: 250, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -373,6 +385,48 @@ export default function SalesDashboard({ masterData }) {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Payment Method Pie Chart */}
+        <div className="glass-card flex flex-col">
+          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Metode Pembayaran</h3>
+          <div style={{ height: 250, width: '100%' }}>
+            {paymentMethodData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={paymentMethodData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {paymentMethodData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[(index + 1) % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: 'var(--card-shadow)', background: 'rgba(15, 23, 42, 0.95)', color: '#fff', backdropFilter: 'blur(10px)' }}
+                    itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                    formatter={(value) => [formatRp(value), 'Omset']}
+                  />
+                  <Legend 
+                    verticalAlign="bottom" 
+                    height={36} 
+                    iconType="circle"
+                    formatter={(value) => <span style={{ color: 'var(--text-secondary)' }}>{value}</span>}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-secondary">
+                Data tidak tersedia
+              </div>
+            )}
           </div>
         </div>
 

@@ -85,6 +85,7 @@ async function main() {
             SalesDate: row['Sales Date'] || row['Sales Date In'],
             Branch: row['Branch'] || row['Cabang'],
             Category: row['Menu Category'],
+            PaymentMethod: row['Payment Method'] || 'Unknown',
         };
     });
     console.log(`  Berhasil mengekstrak ${masterData.length} baris.`);
