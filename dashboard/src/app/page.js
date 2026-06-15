@@ -5,6 +5,8 @@ import SalesDashboard from '@/components/SalesDashboard';
 import ForecastingAnalysis from '@/components/ForecastingAnalysis';
 import { Database } from 'lucide-react';
 
+import BusinessInsights from '@/components/BusinessInsights';
+
 export default function Home() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -86,6 +88,7 @@ export default function Home() {
             bomMenu={data.bomMenu} 
             stokData={data.stok} 
           />
+          <BusinessInsights masterData={data.masterData} />
         </>
       )}
     </main>
