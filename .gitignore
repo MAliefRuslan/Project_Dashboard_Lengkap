@@ -3,6 +3,3 @@ dashboard/.next
 node_modules
 *.log
 *.xlsx
-masterData.json
-bomMenu.json
-stok.json

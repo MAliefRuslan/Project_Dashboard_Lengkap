@@ -13,10 +13,23 @@ export default function Home() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch('/api/data');
-        if (!res.ok) throw new Error('Failed to fetch data');
-        const json = await res.json();
-        setData(json);
+        const basePath = process.env.NODE_ENV === 'production' ? '/Project_Dashboard_Lengkap' : '';
+        
+        const [masterRes, bomRes, stokRes] = await Promise.all([
+          fetch(`${basePath}/masterData.json`),
+          fetch(`${basePath}/bomMenu.json`),
+          fetch(`${basePath}/stok.json`)
+        ]);
+
+        if (!masterRes.ok || !bomRes.ok || !stokRes.ok) {
+           throw new Error('Data is syncing. Please refresh in a few moments.');
+        }
+
+        const masterData = await masterRes.json();
+        const bomMenu = await bomRes.json();
+        const stok = await stokRes.json();
+
+        setData({ masterData, bomMenu, stok });
       } catch (err) {
         setError(err.message);
       } finally {
