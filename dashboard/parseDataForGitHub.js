@@ -81,6 +81,7 @@ async function main() {
         return {
             Menu: menu,
             Qty: row['Qty'] || 0,
+            Total: row['Total'] || 0,
             SalesDate: row['Sales Date'] || row['Sales Date In'],
             Branch: row['Branch'] || row['Cabang'],
             Category: row['Menu Category'],

@@ -2,17 +2,16 @@
 
 import React, { useState, useMemo } from 'react';
 import { 
-  BarChart, Bar, LineChart, Line, PieChart, Pie, 
+  BarChart, Bar, PieChart, Pie, 
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend 
 } from 'recharts';
-import { Filter, TrendingUp, ShoppingBag, Calendar } from 'lucide-react';
+import { Filter, TrendingUp, DollarSign, Calendar, ListOrdered } from 'lucide-react';
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4'];
 
 // Helper to convert Excel Serial Date to JS Date
 function excelDateToJSDate(serial) {
   if (!serial || isNaN(serial)) return null;
-  // Excel epoch is Jan 1, 1900. 25569 days to Jan 1, 1970.
   const utc_days = Math.floor(serial - 25569);
   const utc_value = utc_days * 86400;                                        
   return new Date(utc_value * 1000);
@@ -24,22 +23,56 @@ function getMonthYearStr(serial) {
   return date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
 }
 
+function getMonthSortKey(serial) {
+  const date = excelDateToJSDate(serial);
+  if (!date) return 0;
+  return date.getFullYear() * 100 + date.getMonth(); // e.g., 202605
+}
+
 function getDayStr(serial) {
   const date = excelDateToJSDate(serial);
   if (!date) return 'Unknown';
   return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 }
 
+function getWeekOfMonth(serial) {
+  const date = excelDateToJSDate(serial);
+  if (!date) return 'Unknown';
+  // Week 1 is days 1-7, Week 2 is 8-14, etc.
+  const day = date.getDate();
+  return `Pekan ${Math.ceil(day / 7)}`;
+}
+
+// Format IDR Rupiah
+const formatRp = (value) => {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+};
+const formatCompactRp = (value) => {
+  if (value >= 1e9) return 'Rp ' + (value / 1e9).toFixed(1) + 'M';
+  if (value >= 1e6) return 'Rp ' + (value / 1e6).toFixed(1) + 'Jt';
+  if (value >= 1e3) return 'Rp ' + (value / 1e3).toFixed(0) + 'K';
+  return 'Rp ' + value;
+};
+
 export default function SalesDashboard({ masterData }) {
   const [selectedBranch, setSelectedBranch] = useState('All');
   const [selectedMonth, setSelectedMonth] = useState('All');
 
-  // Add parsed date properties to data
+  // Add parsed date & revenue properties to data
   const processedData = useMemo(() => {
     return masterData.map(d => {
       const monthYear = getMonthYearStr(d.SalesDate);
+      const monthSortKey = getMonthSortKey(d.SalesDate);
       const day = getDayStr(d.SalesDate);
-      return { ...d, monthYear, day, qtyNum: Number(d.Qty) || 0 };
+      const week = getWeekOfMonth(d.SalesDate);
+      return { 
+        ...d, 
+        monthYear, 
+        monthSortKey,
+        day, 
+        week,
+        revenue: Number(d.Total) || 0 
+      };
     });
   }, [masterData]);
 
@@ -50,12 +83,12 @@ export default function SalesDashboard({ masterData }) {
   }, [processedData]);
 
   const months = useMemo(() => {
-    const m = new Set(processedData.map(d => d.monthYear).filter(val => val !== 'Unknown'));
-    // Sort logic could be added here if needed
-    return ['All', ...Array.from(m)];
+    const m = Array.from(new Set(processedData.filter(d => d.monthYear !== 'Unknown').map(d => JSON.stringify({ name: d.monthYear, key: d.monthSortKey }))));
+    const sortedMonths = m.map(s => JSON.parse(s)).sort((a, b) => a.key - b.key).map(m => m.name);
+    return ['All', ...sortedMonths];
   }, [processedData]);
 
-  // Filter data based on selections
+  // Filter data for standard charts (Branch & Month applied)
   const filteredData = useMemo(() => {
     return processedData.filter(d => {
       const matchBranch = selectedBranch === 'All' || d.Branch === selectedBranch;
@@ -64,69 +97,118 @@ export default function SalesDashboard({ masterData }) {
     });
   }, [processedData, selectedBranch, selectedMonth]);
 
-  // Metrics
-  const totalItemsSold = useMemo(() => filteredData.reduce((sum, d) => sum + d.qtyNum, 0), [filteredData]);
+  // Filter data for Month-over-Month (Only Branch applied, ignores Month filter to show all months)
+  const dataForMoM = useMemo(() => {
+    return processedData.filter(d => {
+      return selectedBranch === 'All' || d.Branch === selectedBranch;
+    });
+  }, [processedData, selectedBranch]);
 
-  // Daily Trend Data (Line Chart)
-  const trendData = useMemo(() => {
+  // Metrics
+  const totalRevenue = useMemo(() => filteredData.reduce((sum, d) => sum + d.revenue, 0), [filteredData]);
+
+  // Daily Trend Data (Bar Chart)
+  const dailyTrendData = useMemo(() => {
     const dailyMap = {};
     filteredData.forEach(d => {
       if (d.SalesDate) {
-        dailyMap[d.SalesDate] = (dailyMap[d.SalesDate] || 0) + d.qtyNum;
+        dailyMap[d.SalesDate] = (dailyMap[d.SalesDate] || 0) + d.revenue;
       }
     });
-    // Sort by serial date
     return Object.entries(dailyMap)
-      .map(([serial, qty]) => ({ serial: Number(serial), qty, day: getDayStr(Number(serial)) }))
+      .map(([serial, revenue]) => ({ serial: Number(serial), revenue, day: getDayStr(Number(serial)) }))
       .sort((a, b) => a.serial - b.serial);
   }, [filteredData]);
+
+  // Weekly Revenue Data (Bar Chart)
+  const weeklyData = useMemo(() => {
+    const weekMap = {};
+    filteredData.forEach(d => {
+      if (d.week !== 'Unknown') {
+        weekMap[d.week] = (weekMap[d.week] || 0) + d.revenue;
+      }
+    });
+    return Object.entries(weekMap)
+      .map(([week, revenue]) => ({ week, revenue }))
+      .sort((a, b) => a.week.localeCompare(b.week)); // Pekan 1, Pekan 2, dst.
+  }, [filteredData]);
+
+  // Month-over-Month Data (Bar Chart)
+  const momData = useMemo(() => {
+    const monthMap = {};
+    dataForMoM.forEach(d => {
+      if (d.monthYear !== 'Unknown') {
+        if (!monthMap[d.monthYear]) {
+          monthMap[d.monthYear] = { revenue: 0, sortKey: d.monthSortKey };
+        }
+        monthMap[d.monthYear].revenue += d.revenue;
+      }
+    });
+    return Object.entries(monthMap)
+      .map(([month, data]) => ({ month, revenue: data.revenue, sortKey: data.sortKey }))
+      .sort((a, b) => a.sortKey - b.sortKey);
+  }, [dataForMoM]);
 
   // Branch Distribution Data (Pie Chart)
   const branchDistData = useMemo(() => {
     const bMap = {};
     filteredData.forEach(d => {
       const b = d.Branch || 'Unknown';
-      bMap[b] = (bMap[b] || 0) + d.qtyNum;
+      bMap[b] = (bMap[b] || 0) + d.revenue;
     });
     return Object.entries(bMap)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
   }, [filteredData]);
 
-  // Top Menus
-  const topMenus = useMemo(() => {
-    const menuMap = {};
-    filteredData.forEach(d => {
-      menuMap[d.Menu] = (menuMap[d.Menu] || 0) + d.qtyNum;
-    });
-    return Object.entries(menuMap)
-      .map(([name, qty]) => ({ name, qty }))
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 5);
-  }, [filteredData]);
-
-  // Category Sales Data
+  // Category Sales Data (Bar Chart)
   const categoryData = useMemo(() => {
     const catMap = {};
     filteredData.forEach(d => {
       const cat = d.Category || 'Lainnya';
-      catMap[cat] = (catMap[cat] || 0) + d.qtyNum;
+      catMap[cat] = (catMap[cat] || 0) + d.revenue;
     });
     return Object.entries(catMap)
-      .map(([name, qty]) => ({ name, qty }))
-      .sort((a, b) => b.qty - a.qty);
+      .map(([name, revenue]) => ({ name, revenue }))
+      .sort((a, b) => b.revenue - a.revenue);
   }, [filteredData]);
+
+  // Top 10 Menus
+  const topMenus = useMemo(() => {
+    const menuMap = {};
+    filteredData.forEach(d => {
+      menuMap[d.Menu] = (menuMap[d.Menu] || 0) + d.revenue;
+    });
+    return Object.entries(menuMap)
+      .map(([name, revenue]) => ({ name, revenue }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+  }, [filteredData]);
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div style={{ borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(15, 23, 42, 0.95)', padding: '12px', color: '#fff', backdropFilter: 'blur(10px)' }}>
+          <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#94a3b8' }}>{label}</p>
+          <p style={{ margin: 0, fontWeight: 'bold', color: payload[0].fill || 'var(--accent-color)' }}>
+            {formatRp(payload[0].value)}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="glass-card animate-fade-in mb-8">
       {/* Header & Filters */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <TrendingUp className="text-accent" />
-            <span className="header-gradient">Performance Overview</span>
+            <span className="header-gradient">Analisa Pendapatan (Revenue)</span>
           </h2>
-          <p className="text-secondary text-sm">Analisa penjualan komprehensif untuk evaluasi bisnis</p>
+          <p className="text-secondary text-sm">Dashboard performa penjualan perusahaan berdasarkan pendapatan</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
@@ -161,68 +243,77 @@ export default function SalesDashboard({ masterData }) {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid md:grid-cols-3 gap-6 mb-8">
-        <div className="glass-card flex items-center gap-4 border-l-4" style={{ borderLeftColor: 'var(--accent-color)' }}>
+      <div className="mb-8">
+        <div className="glass-card flex items-center gap-4 border-l-4" style={{ borderLeftColor: 'var(--accent-color)', maxWidth: '400px' }}>
           <div style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '12px' }}>
-            <ShoppingBag className="text-accent" size={24} />
+            <DollarSign className="text-accent" size={28} />
           </div>
           <div>
-            <p className="text-sm text-secondary">Total Porsi Terjual</p>
-            <p className="text-3xl font-bold">{totalItemsSold.toLocaleString()}</p>
-          </div>
-        </div>
-
-        <div className="glass-card md:col-span-2">
-          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Top 5 Menu Paling Laris</h3>
-          <div className="flex flex-col gap-3">
-            {topMenus.map((m, i) => (
-              <div key={m.name} className="flex justify-between items-center group">
-                <div className="flex items-center gap-3">
-                  <span className="font-bold text-accent w-6" style={{ opacity: 1 - i * 0.15 }}>#{i + 1}</span>
-                  <span className="font-medium group-hover:text-accent transition-colors">{m.name}</span>
-                </div>
-                <span className="font-semibold">{m.qty.toLocaleString()} porsi</span>
-              </div>
-            ))}
-            {topMenus.length === 0 && <p className="text-secondary text-sm">Tidak ada data untuk filter ini.</p>}
+            <p className="text-sm text-secondary">Total Pendapatan</p>
+            <p className="text-3xl font-bold header-gradient">{formatRp(totalRevenue)}</p>
           </div>
         </div>
       </div>
 
       {/* Charts Grid */}
-      <div className="grid md:grid-cols-2 gap-6 mb-6">
+      <div className="grid md:grid-cols-2 gap-6 mb-8">
         
-        {/* Daily Trend Chart */}
+        {/* Daily Trend Chart (Bar) */}
         <div className="glass-card flex flex-col">
-          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Tren Penjualan Harian</h3>
-          <div style={{ height: 300, width: '100%' }}>
+          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Tren Pendapatan Harian</h3>
+          <div style={{ height: 250, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={dailyTrendData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(150, 150, 150, 0.1)" />
-                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} minTickGap={20} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--card-shadow)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                  labelStyle={{ color: 'var(--text-secondary)', marginBottom: '4px' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="qty" 
-                  name="Porsi Terjual"
-                  stroke="var(--accent-color)" 
-                  strokeWidth={3} 
-                  dot={{ r: 3, fill: 'var(--bg-primary)', strokeWidth: 2 }} 
-                  activeDot={{ r: 6, strokeWidth: 0 }} 
-                />
-              </LineChart>
+                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} minTickGap={20} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} tickFormatter={formatCompactRp} width={60} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="revenue" name="Pendapatan" radius={[4, 4, 0, 0]} fill="var(--accent-color)" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Weekly Revenue Chart */}
+        <div className="glass-card flex flex-col">
+          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Pendapatan Mingguan</h3>
+          <div style={{ height: 250, width: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(150, 150, 150, 0.1)" />
+                <XAxis dataKey="week" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} tickFormatter={formatCompactRp} width={60} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="revenue" name="Pendapatan" radius={[4, 4, 0, 0]}>
+                  {weeklyData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % 2 === 0 ? 1 : 2]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Month-over-Month Chart */}
+        <div className="glass-card flex flex-col">
+          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Perbandingan Antar Bulan</h3>
+          <div style={{ height: 250, width: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={momData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(150, 150, 150, 0.1)" />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} tickFormatter={formatCompactRp} width={60} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="revenue" name="Pendapatan" radius={[4, 4, 0, 0]} fill="#10b981" />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Branch Distribution Pie Chart */}
         <div className="glass-card flex flex-col">
-          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Kontribusi Penjualan per Cabang</h3>
-          <div style={{ height: 300, width: '100%' }}>
+          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Kontribusi Cabang</h3>
+          <div style={{ height: 250, width: '100%' }}>
             {branchDistData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -230,8 +321,8 @@ export default function SalesDashboard({ masterData }) {
                     data={branchDistData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={70}
-                    outerRadius={100}
+                    innerRadius={60}
+                    outerRadius={90}
                     paddingAngle={5}
                     dataKey="value"
                     stroke="none"
@@ -241,9 +332,9 @@ export default function SalesDashboard({ masterData }) {
                     ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--card-shadow)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                    itemStyle={{ color: 'var(--text-primary)' }}
-                    formatter={(value) => [`${value.toLocaleString()} porsi`, 'Penjualan']}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: 'var(--card-shadow)', background: 'rgba(15, 23, 42, 0.95)', color: '#fff', backdropFilter: 'blur(10px)' }}
+                    itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                    formatter={(value) => [formatRp(value), 'Pendapatan']}
                   />
                   <Legend 
                     verticalAlign="bottom" 
@@ -261,29 +352,50 @@ export default function SalesDashboard({ masterData }) {
           </div>
         </div>
 
+        {/* Category Bar Chart */}
+        <div className="glass-card flex flex-col md:col-span-2">
+          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Pendapatan Berdasarkan Kategori</h3>
+          <div style={{ height: 250, width: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={categoryData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(150, 150, 150, 0.1)" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} tickFormatter={formatCompactRp} width={60} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="revenue" name="Pendapatan" radius={[4, 4, 0, 0]}>
+                  {categoryData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[(index + 3) % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
       </div>
 
-      {/* Category Bar Chart */}
+      {/* Top 10 Menus - Moved to Bottom */}
       <div className="glass-card">
-        <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Penjualan Berdasarkan Kategori</h3>
-        <div style={{ height: 300, width: '100%' }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={categoryData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(150, 150, 150, 0.1)" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
-              <Tooltip 
-                cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }} 
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--card-shadow)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-                formatter={(value) => [`${value.toLocaleString()} porsi`, 'Terjual']}
-              />
-              <Bar dataKey="qty" name="Porsi Terjual" radius={[4, 4, 0, 0]}>
-                {categoryData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={index % 2 === 0 ? 'var(--accent-color)' : '#8b5cf6'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="flex items-center gap-2 mb-6">
+          <ListOrdered className="text-accent" size={20} />
+          <h3 className="text-lg font-semibold text-white">Top 10 Menu Paling Laris</h3>
+        </div>
+        
+        <div className="grid md:grid-cols-2 gap-x-12 gap-y-4">
+          {topMenus.map((m, i) => (
+            <div key={m.name} className="flex justify-between items-center group p-3 rounded-lg hover:bg-white/5 transition-colors border border-transparent hover:border-white/10">
+              <div className="flex items-center gap-4">
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/10 text-accent font-bold text-sm">
+                  {i + 1}
+                </span>
+                <span className="font-medium text-white group-hover:text-accent transition-colors">{m.name}</span>
+              </div>
+              <span className="font-semibold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full text-sm">
+                {formatRp(m.revenue)}
+              </span>
+            </div>
+          ))}
+          {topMenus.length === 0 && <p className="text-secondary text-sm p-3">Tidak ada data untuk filter ini.</p>}
         </div>
       </div>
 
