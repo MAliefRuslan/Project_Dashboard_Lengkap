@@ -183,11 +183,11 @@ export default function SalesDashboard({ masterData }) {
     filteredData.forEach(d => {
       if (d.Hour !== 'Unknown' && d.Hour != null) {
         const hrStr = String(d.Hour).padStart(2, '0') + ':00';
-        hrMap[hrStr] = (hrMap[hrStr] || 0) + d.revenue;
+        hrMap[hrStr] = (hrMap[hrStr] || 0) + (Number(d.Qty) || 0);
       }
     });
     return Object.entries(hrMap)
-      .map(([hour, revenue]) => ({ hour, revenue }))
+      .map(([hour, qty]) => ({ hour, qty }))
       .sort((a, b) => a.hour.localeCompare(b.hour));
   }, [filteredData]);
 
@@ -215,13 +215,13 @@ export default function SalesDashboard({ masterData }) {
       .slice(0, 10);
   }, [filteredData]);
 
-  const CustomTooltip = ({ active, payload, label }) => {
+  const CustomTooltip = ({ active, payload, label, isQty }) => {
     if (active && payload && payload.length) {
       return (
         <div style={{ borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(15, 23, 42, 0.95)', padding: '12px', color: '#fff', backdropFilter: 'blur(10px)' }}>
           <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#94a3b8' }}>{label}</p>
-          <p style={{ margin: 0, fontWeight: 'bold', color: payload[0].fill || 'var(--accent-color)' }}>
-            {formatRp(payload[0].value)}
+          <p style={{ margin: 0, fontWeight: 'bold', color: payload[0].fill || payload[0].stroke || 'var(--accent-color)' }}>
+            {isQty ? `${Number(payload[0].value).toLocaleString('id-ID')} Transaksi/Porsi` : formatRp(payload[0].value)}
           </p>
         </div>
       );
@@ -416,7 +416,7 @@ export default function SalesDashboard({ masterData }) {
 
         {/* Peak Hours Area Chart */}
         <div className="glass-card flex flex-col">
-          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Trafik Jam Sibuk (Peak Hours)</h3>
+          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Trafik Jam Sibuk (Berdasarkan Qty)</h3>
           <div style={{ height: 250, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={peakHoursData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
@@ -428,9 +428,9 @@ export default function SalesDashboard({ masterData }) {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(150, 150, 150, 0.1)" />
                 <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} tickFormatter={formatCompactRp} width={60} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="revenue" name="Pendapatan" stroke={COLORS[4]} strokeWidth={3} fillOpacity={1} fill="url(#colorHour)" />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} width={40} />
+                <Tooltip content={<CustomTooltip isQty={true} />} />
+                <Area type="monotone" dataKey="qty" name="Qty / Porsi" stroke={COLORS[4]} strokeWidth={3} fillOpacity={1} fill="url(#colorHour)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
