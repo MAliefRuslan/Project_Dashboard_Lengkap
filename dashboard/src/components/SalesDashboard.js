@@ -32,15 +32,19 @@ function getMonthSortKey(serial) {
 function getDayStr(serial) {
   const date = excelDateToJSDate(serial);
   if (!date) return 'Unknown';
-  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+  // Return just the day number (1-31)
+  return date.getDate().toString();
 }
 
 function getWeekOfMonth(serial) {
   const date = excelDateToJSDate(serial);
   if (!date) return 'Unknown';
-  // Week 1 is days 1-7, Week 2 is 8-14, etc.
   const day = date.getDate();
-  return `Pekan ${Math.ceil(day / 7)}`;
+  if (day <= 7) return '1 - 7';
+  if (day <= 14) return '8 - 14';
+  if (day <= 21) return '15 - 21';
+  if (day <= 28) return '22 - 28';
+  return '29 - 31';
 }
 
 // Format IDR Rupiah
@@ -111,13 +115,13 @@ export default function SalesDashboard({ masterData }) {
   const dailyTrendData = useMemo(() => {
     const dailyMap = {};
     filteredData.forEach(d => {
-      if (d.SalesDate) {
-        dailyMap[d.SalesDate] = (dailyMap[d.SalesDate] || 0) + d.revenue;
+      if (d.day !== 'Unknown') {
+        dailyMap[d.day] = (dailyMap[d.day] || 0) + d.revenue;
       }
     });
     return Object.entries(dailyMap)
-      .map(([serial, revenue]) => ({ serial: Number(serial), revenue, day: getDayStr(Number(serial)) }))
-      .sort((a, b) => a.serial - b.serial);
+      .map(([dayStr, revenue]) => ({ dayNum: Number(dayStr), day: dayStr, revenue }))
+      .sort((a, b) => a.dayNum - b.dayNum);
   }, [filteredData]);
 
   // Weekly Revenue Data (Bar Chart)
@@ -130,7 +134,7 @@ export default function SalesDashboard({ masterData }) {
     });
     return Object.entries(weekMap)
       .map(([week, revenue]) => ({ week, revenue }))
-      .sort((a, b) => a.week.localeCompare(b.week)); // Pekan 1, Pekan 2, dst.
+      .sort((a, b) => parseInt(a.week) - parseInt(b.week)); // e.g., "1 - 7" -> 1
   }, [filteredData]);
 
   // Month-over-Month Data (Bar Chart)
