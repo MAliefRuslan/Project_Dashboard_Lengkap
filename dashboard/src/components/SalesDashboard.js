@@ -259,16 +259,28 @@ export default function SalesDashboard({ masterData }) {
       </div>
 
       {/* KPI Cards */}
-      <div className="mb-8">
-        <div className="glass-card flex items-center gap-4 border-l-4" style={{ borderLeftColor: 'var(--accent-color)', maxWidth: '400px' }}>
-          <div style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '12px' }}>
-            <DollarSign className="text-accent" size={28} />
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="glass-card flex flex-col gap-2 border-t-4" style={{ borderTopColor: 'var(--accent-color)' }}>
+          <div className="flex items-center gap-3">
+            <div style={{ padding: '0.75rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '10px' }}>
+              <DollarSign className="text-accent" size={20} />
+            </div>
+            <p className="text-sm font-semibold text-secondary uppercase tracking-wider">Total Pendapatan</p>
           </div>
-          <div>
-            <p className="text-sm text-secondary">Total Pendapatan</p>
-            <p className="text-3xl font-bold header-gradient">{formatRp(totalRevenue)}</p>
-          </div>
+          <p className="text-2xl font-bold header-gradient mt-2">{formatRp(totalRevenue)}</p>
         </div>
+
+        {paymentMethodData.map((pm, index) => (
+          <div key={pm.name} className="glass-card flex flex-col gap-2 border-t-4" style={{ borderTopColor: COLORS[(index + 1) % COLORS.length] }}>
+            <div className="flex items-center gap-3">
+              <div style={{ padding: '0.75rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '10px' }}>
+                <DollarSign style={{ color: COLORS[(index + 1) % COLORS.length] }} size={20} />
+              </div>
+              <p className="text-sm font-semibold text-secondary uppercase tracking-wider">{pm.name}</p>
+            </div>
+            <p className="text-2xl font-bold mt-2">{formatRp(pm.value)}</p>
+          </div>
+        ))}
       </div>
 
       {/* Charts Grid */}
@@ -369,7 +381,7 @@ export default function SalesDashboard({ masterData }) {
         </div>
 
         {/* Category Bar Chart */}
-        <div className="glass-card flex flex-col">
+        <div className="glass-card flex flex-col md:col-span-2">
           <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Pendapatan Berdasarkan Kategori</h3>
           <div style={{ height: 250, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -385,48 +397,6 @@ export default function SalesDashboard({ masterData }) {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Payment Method Pie Chart */}
-        <div className="glass-card flex flex-col">
-          <h3 className="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">Metode Pembayaran</h3>
-          <div style={{ height: 250, width: '100%' }}>
-            {paymentMethodData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={paymentMethodData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={5}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {paymentMethodData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[(index + 1) % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: 'var(--card-shadow)', background: 'rgba(15, 23, 42, 0.95)', color: '#fff', backdropFilter: 'blur(10px)' }}
-                    itemStyle={{ color: '#fff', fontWeight: 'bold' }}
-                    formatter={(value) => [formatRp(value), 'Omset']}
-                  />
-                  <Legend 
-                    verticalAlign="bottom" 
-                    height={36} 
-                    iconType="circle"
-                    formatter={(value) => <span style={{ color: 'var(--text-secondary)' }}>{value}</span>}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-secondary">
-                Data tidak tersedia
-              </div>
-            )}
           </div>
         </div>
 
