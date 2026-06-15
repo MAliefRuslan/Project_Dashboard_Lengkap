@@ -12,7 +12,10 @@ export default function ForecastingAnalysis({ masterData, bomMenu, stokData }) {
   }, [masterData]);
 
   const forecast = useMemo(() => {
-    // 1. Filter Master Data
+    // 1. Filter Master Data & Find Date Range
+    let minDate = Infinity;
+    let maxDate = -Infinity;
+    
     const dataToProcess = selectedBranch === 'All' 
       ? masterData 
       : masterData.filter(d => d.Branch === selectedBranch);
@@ -20,22 +23,36 @@ export default function ForecastingAnalysis({ masterData, bomMenu, stokData }) {
     // 2. Aggregate Qty Sold by Menu
     const menuSales = {};
     dataToProcess.forEach(d => {
+      if (d.SalesDate && typeof d.SalesDate === 'number') {
+        minDate = Math.min(minDate, d.SalesDate);
+        maxDate = Math.max(maxDate, d.SalesDate);
+      }
       menuSales[d.Menu] = (menuSales[d.Menu] || 0) + Number(d.Qty);
     });
 
-    // 3. Calculate Ingredient Usage
+    // Calculate total days for daily average
+    let totalDays = 1;
+    if (minDate !== Infinity && maxDate !== -Infinity) {
+      totalDays = maxDate - minDate + 1;
+    }
+    if (totalDays <= 0) totalDays = 1;
+
+    // 3. Calculate 30-Day Forecast Ingredient Usage
     const ingredientUsage = {};
     bomMenu.forEach(bomRow => {
       const menuName = bomRow['MENU'];
-      const qtySold = menuSales[menuName];
+      const historicalQtySold = menuSales[menuName];
       
-      if (qtySold && qtySold > 0) {
+      if (historicalQtySold && historicalQtySold > 0) {
+        // Forecast next 30 days: (Historical Total / Total Days) * 30
+        const forecastedQty = (historicalQtySold / totalDays) * 30;
+        
         // Iterate over ingredient columns (all keys except 'MENU')
         Object.keys(bomRow).forEach(key => {
           if (key !== 'MENU' && bomRow[key]) {
             const amountPerMenu = Number(bomRow[key]);
             if (!isNaN(amountPerMenu)) {
-              ingredientUsage[key] = (ingredientUsage[key] || 0) + (qtySold * amountPerMenu);
+              ingredientUsage[key] = (ingredientUsage[key] || 0) + (forecastedQty * amountPerMenu);
             }
           }
         });
@@ -45,7 +62,7 @@ export default function ForecastingAnalysis({ masterData, bomMenu, stokData }) {
     // 4. Compare with Stock
     const stokMap = {};
     stokData.forEach(s => {
-      // Assuming columns are 'BAHAN' and 'STOK' based on our inspection
+      // Assuming columns are 'BAHAN' and 'STOK'
       stokMap[s['BAHAN']] = Number(s['STOK']) || 0;
     });
 
@@ -55,7 +72,7 @@ export default function ForecastingAnalysis({ masterData, bomMenu, stokData }) {
     const allIngredients = new Set([...Object.keys(ingredientUsage), ...Object.keys(stokMap)]);
     
     allIngredients.forEach(ingredient => {
-      const used = ingredientUsage[ingredient] || 0;
+      const used = Math.ceil(ingredientUsage[ingredient] || 0); // Round up for safety
       const stock = stokMap[ingredient] || 0;
       const remaining = stock - used;
       const needsRestock = remaining < 0;
@@ -87,9 +104,9 @@ export default function ForecastingAnalysis({ masterData, bomMenu, stokData }) {
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <PackageSearch className="text-accent" />
-            <span className="header-gradient">Ingredient Forecasting</span>
+            <span className="header-gradient">Forecasting Bahan (30 Hari Kedepan)</span>
           </h2>
-          <p className="text-secondary text-sm">Analyze stock usage and restocking needs based on sales</p>
+          <p className="text-secondary text-sm">Analisa kebutuhan bahan baku untuk bulan depan berdasarkan rata-rata penjualan</p>
         </div>
         <div className="flex items-center gap-2">
           <select 
@@ -109,14 +126,14 @@ export default function ForecastingAnalysis({ masterData, bomMenu, stokData }) {
         <div className="mb-6 p-4 rounded-xl border border-red-200" style={{ backgroundColor: 'rgba(239, 68, 68, 0.05)', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
           <div className="flex items-center gap-3 text-danger font-semibold">
             <AlertTriangle size={20} />
-            <span>Attention: {itemsToRestock} ingredients need to be restocked!</span>
+            <span>Perhatian: {itemsToRestock} bahan baku akan habis dan perlu dibeli untuk bulan depan!</span>
           </div>
         </div>
       ) : (
         <div className="mb-6 p-4 rounded-xl border border-green-200" style={{ backgroundColor: 'rgba(16, 185, 129, 0.05)', borderColor: 'rgba(16, 185, 129, 0.2)' }}>
           <div className="flex items-center gap-3 text-success font-semibold">
             <CheckCircle size={20} />
-            <span>Stock levels are healthy. No immediate restock needed.</span>
+            <span>Stok sangat aman. Tidak ada bahan baku yang perlu dibeli untuk bulan depan.</span>
           </div>
         </div>
       )}
@@ -125,11 +142,11 @@ export default function ForecastingAnalysis({ masterData, bomMenu, stokData }) {
         <table>
           <thead>
             <tr>
-              <th>Ingredient</th>
-              <th>Current Stock</th>
-              <th>Forecasted Usage</th>
-              <th>Remaining</th>
-              <th>Restock Amount</th>
+              <th>Bahan Baku</th>
+              <th>Stok Saat Ini</th>
+              <th>Estimasi Kebutuhan (30 Hari)</th>
+              <th>Proyeksi Sisa</th>
+              <th>Jumlah Harus Dibeli</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -150,9 +167,9 @@ export default function ForecastingAnalysis({ masterData, bomMenu, stokData }) {
                 </td>
                 <td>
                   {item.needsRestock ? (
-                    <span className="badge badge-danger">Needs Restock</span>
+                    <span className="badge badge-danger">Perlu Dibeli</span>
                   ) : (
-                    <span className="badge badge-success">Sufficient</span>
+                    <span className="badge badge-success">Aman</span>
                   )}
                 </td>
               </tr>
@@ -160,7 +177,7 @@ export default function ForecastingAnalysis({ masterData, bomMenu, stokData }) {
             {forecast.length === 0 && (
               <tr>
                 <td colSpan="6" className="text-center py-8 text-secondary">
-                  No ingredient data available for the selected criteria.
+                  Belum ada data bahan baku untuk kriteria ini.
                 </td>
               </tr>
             )}

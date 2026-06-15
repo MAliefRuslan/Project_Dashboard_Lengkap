@@ -60,13 +60,23 @@ async function streamExcel(inputPath, filterFn) {
     return data;
 }
 
+const xlsx = require('xlsx');
+
+function parseExcelSmall(filePath) {
+    if (!fs.existsSync(filePath)) return [];
+    const wb = xlsx.readFile(filePath);
+    const sheetName = wb.SheetNames[0];
+    const worksheet = wb.Sheets[sheetName];
+    return xlsx.utils.sheet_to_json(worksheet, { defval: null });
+}
+
 async function main() {
     console.log('Mulai memproses file Excel untuk GitHub...');
 
     // 1. Master Data
     console.log('- Memproses Master_Data.xlsx...');
     const masterData = await streamExcel('../Master_Data.xlsx', row => {
-        const menu = row['Menu'];
+        const menu = row['Menu'] || row['Menu '];
         if (!menu) return null;
         return {
             Menu: menu,
@@ -79,15 +89,15 @@ async function main() {
     console.log(`  Berhasil mengekstrak ${masterData.length} baris.`);
     fs.writeFileSync(path.join(publicDir, 'masterData.json'), JSON.stringify(masterData));
 
-    // 2. BOM MENU
+    // 2. BOM MENU (Use xlsx for small file)
     console.log('- Memproses BOM MENU.xlsx...');
-    const bomData = await streamExcel('../BOM MENU.xlsx', row => Object.keys(row).length > 0 ? row : null);
+    const bomData = parseExcelSmall('../BOM MENU.xlsx');
     console.log(`  Berhasil mengekstrak ${bomData.length} baris.`);
     fs.writeFileSync(path.join(publicDir, 'bomMenu.json'), JSON.stringify(bomData));
 
-    // 3. STOK
+    // 3. STOK (Use xlsx for small file)
     console.log('- Memproses STOK.xlsx...');
-    const stokData = await streamExcel('../STOK.xlsx', row => Object.keys(row).length > 0 ? row : null);
+    const stokData = parseExcelSmall('../STOK.xlsx');
     console.log(`  Berhasil mengekstrak ${stokData.length} baris.`);
     fs.writeFileSync(path.join(publicDir, 'stok.json'), JSON.stringify(stokData));
 
